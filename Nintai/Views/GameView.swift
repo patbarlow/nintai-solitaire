@@ -158,7 +158,6 @@ struct GameView: View {
             }
             .onAppear {
                 calculateCardSize(geometry: geometry)
-                gameState.newGame()
             }
             .onChange(of: geometry.size) { _, _ in
                 calculateCardSize(geometry: geometry)
