@@ -80,6 +80,7 @@ struct GameView: View {
     // Confirmation States
     @State private var showNewGameConfirmation = false
     @State private var showNoMovesAlert = false
+    @State private var showWinAlert = false
     
     // Dynamic sizing based on screen width
     @State private var cardWidth: CGFloat = 45
@@ -113,7 +114,7 @@ struct GameView: View {
                     // This is the draggable copy that appears on top
                     draggedCardView
                 }
-                .disabled(showNewGameConfirmation || showNoMovesAlert)
+                .disabled(showNewGameConfirmation || showNoMovesAlert || showWinAlert)
                 
                 // --- Modals ---
                 if showNewGameConfirmation {
@@ -155,10 +156,29 @@ struct GameView: View {
                         }
                     )
                 }
+                
+                if showWinAlert {
+                    ConfirmationSheetView(
+                        title: "Congratulations!",
+                        message: "You won! Final score: \(gameState.score)",
+                        confirmButtonTitle: "New Game",
+                        cancelButtonTitle: "OK",
+                        confirmAction: {
+                            withAnimation {
+                                gameState.newGame()
+                                showWinAlert = false
+                            }
+                        },
+                        cancelAction: {
+                            withAnimation {
+                                showWinAlert = false
+                            }
+                        }
+                    )
+                }
             }
             .onAppear {
                 calculateCardSize(geometry: geometry)
-                gameState.newGame()
             }
             .onChange(of: geometry.size) { _, _ in
                 calculateCardSize(geometry: geometry)
@@ -166,6 +186,12 @@ struct GameView: View {
             .onChange(of: gameState.gameWon) { _, isWon in
                 if isWon {
                     HapticManager.shared.gameWin()
+                    // Use a slight delay to ensure other UI updates settle
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        withAnimation {
+                            showWinAlert = true
+                        }
+                    }
                 }
             }
             .onChange(of: gameState.noMovesLeft) { _, newValue in
