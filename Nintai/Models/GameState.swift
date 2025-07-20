@@ -26,6 +26,7 @@ class GameState: ObservableObject {
         score = 0
         moves = 0
         gameWon = false
+        noMovesLeft = false
         startTime = Date()
         
         var cardIndex = 0
