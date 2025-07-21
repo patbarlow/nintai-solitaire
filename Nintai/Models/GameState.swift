@@ -17,6 +17,7 @@ class GameState: ObservableObject {
     }
     
     func newGame() {
+        clearSavedGameState()
         let deck = Card.createDeck()
         stock = []
         waste = []
@@ -109,6 +110,7 @@ class GameState: ObservableObject {
     func moveToFoundation(card: Card, foundationIndex: Int) {
         foundations[foundationIndex].append(card)
         moves += 1
+        saveGameState()
         checkForWin()
         
         Task {
@@ -127,6 +129,7 @@ class GameState: ObservableObject {
         }
         
         moves += 1
+        saveGameState()
         
         Task {
             await checkForNoMoves()
@@ -134,24 +137,55 @@ class GameState: ObservableObject {
     }
     
     private func checkForWin() {
-        _ = gameWon
+        let wasWon = gameWon
         gameWon = foundations.allSatisfy { $0.count == 13 }
+        if gameWon && !wasWon {
+            clearSavedGameState()
+        }
     }
     
     // Check for available moves
     func checkForNoMoves() async {
         // Don't check for no moves if the game is already won
         if gameWon {
-            if self.noMovesLeft != false {
-                self.noMovesLeft = false
+            await MainActor.run {
+                if self.noMovesLeft != false {
+                    self.noMovesLeft = false
+                }
             }
             return
         }
+        
+        // First check for auto-completion opportunity
+        await checkForAutoCompletion()
+        
+        // If game was won during auto-completion, don't check for no moves
+        if gameWon {
+            await MainActor.run {
+                if self.noMovesLeft != false {
+                    self.noMovesLeft = false
+                }
+            }
+            return
+        }
+        
+        // If we can still draw from stock or recycle waste, we have moves
+        if !stock.isEmpty || (!waste.isEmpty && stock.isEmpty) {
+            await MainActor.run {
+                if self.noMovesLeft != false { 
+                    self.noMovesLeft = false 
+                }
+            }
+            return
+        }
+        
         // Check moves from waste to foundations
         if let topWasteCard = waste.last {
             for i in 0..<4 {
                 if canMoveToFoundation(card: topWasteCard, foundationIndex: i) {
-                    if self.noMovesLeft != false { self.noMovesLeft = false }
+                    await MainActor.run {
+                        if self.noMovesLeft != false { self.noMovesLeft = false }
+                    }
                     return
                 }
             }
@@ -161,7 +195,9 @@ class GameState: ObservableObject {
         if let topWasteCard = waste.last {
             for i in 0..<7 {
                 if canMoveCard(from: topWasteCard, to: tableau[i].last) {
-                     if self.noMovesLeft != false { self.noMovesLeft = false }
+                    await MainActor.run {
+                        if self.noMovesLeft != false { self.noMovesLeft = false }
+                    }
                     return
                 }
             }
@@ -172,76 +208,113 @@ class GameState: ObservableObject {
             if let topTableauCard = tableau[i].last, topTableauCard.isFaceUp {
                 for j in 0..<4 {
                     if canMoveToFoundation(card: topTableauCard, foundationIndex: j) {
-                        if self.noMovesLeft != false { self.noMovesLeft = false }
+                        await MainActor.run {
+                            if self.noMovesLeft != false { self.noMovesLeft = false }
+                        }
                         return
                     }
                 }
             }
         }
 
-        // Check for moves between tableau columns
-        for i in 0..<7 {
-            if let sourceCard = tableau[i].first(where: { $0.isFaceUp }) {
-                for j in 0..<7 where i != j {
-                    if canMoveCard(from: sourceCard, to: tableau[j].last) {
-                        if self.noMovesLeft != false { self.noMovesLeft = false }
-                        return
-                    }
-                }
-            }
-        }
-        
-        // Check all cards in stock (draw pile) for potential moves
-        for stockCard in stock {
-            let faceUpCard = Card(suit: stockCard.suit, rank: stockCard.rank, isFaceUp: true)
+        // Check for moves between tableau columns (properly check all valid sequences)
+        for sourceCol in 0..<7 {
+            let sourceColumn = tableau[sourceCol]
             
-            // Check if this stock card can move to any foundation
-            for i in 0..<4 {
-                if canMoveToFoundation(card: faceUpCard, foundationIndex: i) {
-                    if self.noMovesLeft != false { self.noMovesLeft = false }
-                    return
-                }
-            }
-            
-            // Check if this stock card can move to any tableau column
-            for i in 0..<7 {
-                if canMoveCard(from: faceUpCard, to: tableau[i].last) {
-                    if self.noMovesLeft != false { self.noMovesLeft = false }
-                    return
-                }
-            }
-        }
-        
-        // If stock is empty but waste can be recycled, check if recycling would create moves
-        if stock.isEmpty && !waste.isEmpty {
-            // Simulate recycling: all waste cards become stock (face down)
-            let recycledStock = waste.reversed()
-            
-            // Check if any recycled card could create a move
-            for card in recycledStock {
-                let faceUpCard = Card(suit: card.suit, rank: card.rank, isFaceUp: true)
+            // Find all face-up cards that could be moved as sequences
+            for startIndex in 0..<sourceColumn.count {
+                let card = sourceColumn[startIndex]
+                if !card.isFaceUp { continue }
                 
-                // Check foundations
-                for i in 0..<4 {
-                    if canMoveToFoundation(card: faceUpCard, foundationIndex: i) {
-                        if self.noMovesLeft != false { self.noMovesLeft = false }
-                        return
+                // Check if this card can start a valid sequence to move
+                var isValidSequence = true
+                for seqIndex in startIndex..<sourceColumn.count - 1 {
+                    let current = sourceColumn[seqIndex]
+                    let next = sourceColumn[seqIndex + 1]
+                    if next.rank.rawValue != current.rank.rawValue - 1 || next.color == current.color {
+                        isValidSequence = false
+                        break
                     }
                 }
                 
-                // Check tableau
-                for i in 0..<7 {
-                    if canMoveCard(from: faceUpCard, to: tableau[i].last) {
-                        if self.noMovesLeft != false { self.noMovesLeft = false }
-                        return
+                if isValidSequence {
+                    // Try to move this sequence to any other column
+                    for destCol in 0..<7 where destCol != sourceCol {
+                        if canMoveCard(from: card, to: tableau[destCol].last) {
+                            await MainActor.run {
+                                if self.noMovesLeft != false { self.noMovesLeft = false }
+                            }
+                            return
+                        }
                     }
                 }
             }
         }
         
         // If we got here, no moves are left
-        if self.noMovesLeft != true {
-            self.noMovesLeft = true
+        await MainActor.run {
+            if self.noMovesLeft != true {
+                self.noMovesLeft = true
+            }
+        }
+    }
+    
+    // Auto-completion when all cards are face-up
+    @MainActor
+    func checkForAutoCompletion() async {
+        // Check if all tableau cards are face-up
+        let allTableauFaceUp = tableau.allSatisfy { column in
+            column.allSatisfy { $0.isFaceUp }
+        }
+        
+        // All cards must be revealed (stock empty, all tableau face-up)
+        // Waste cards are always face-up when drawn
+        guard allTableauFaceUp && stock.isEmpty else { return }
+        
+        // Start auto-completion
+        var foundMove = true
+        while foundMove && !gameWon {
+            foundMove = false
+            
+            // Try to move cards from tableau to foundations
+            for colIndex in 0..<7 {
+                if let topCard = tableau[colIndex].last {
+                    for foundIndex in 0..<4 {
+                        if canMoveToFoundation(card: topCard, foundationIndex: foundIndex) {
+                            // Perform the move with animation delay
+                            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                            
+                            tableau[colIndex].removeLast()
+                            foundations[foundIndex].append(topCard)
+                            moves += 1
+                            saveGameState()
+                            checkForWin()
+                            
+                            foundMove = true
+                            break
+                        }
+                    }
+                    if foundMove { break }
+                }
+            }
+            
+            // Try to move cards from waste to foundations
+            if !foundMove, let topWasteCard = waste.last {
+                for foundIndex in 0..<4 {
+                    if canMoveToFoundation(card: topWasteCard, foundationIndex: foundIndex) {
+                        try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                        
+                        waste.removeLast()
+                        foundations[foundIndex].append(topWasteCard)
+                        moves += 1
+                        saveGameState()
+                        checkForWin()
+                        
+                        foundMove = true
+                        break
+                    }
+                }
+            }
         }
     }
     

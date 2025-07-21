@@ -76,9 +76,10 @@ struct GameView: View {
     @State private var dragInitialOffset: CGSize = .zero
     @State private var foundationFrames: [CGRect] = Array(repeating: .zero, count: 4)
     @State private var tableauFrames: [CGRect] = Array(repeating: .zero, count: 7)
+    @Environment(\.presentationMode) var presentationMode
     
     // Confirmation States
-    @State private var showNewGameConfirmation = false
+    @State private var showQuitGameConfirmation = false
     @State private var showNoMovesAlert = false
     @State private var showWinAlert = false
     
@@ -89,6 +90,10 @@ struct GameView: View {
     let cardAspectRatio: CGFloat = 63.0 / 45.0 // height / width
     let horizontalPadding: CGFloat = 5 // Padding on either side
     let columnSpacing: CGFloat = 8 // Space between columns
+    
+    init(savedGame: GameState? = nil) {
+        _gameState = StateObject(wrappedValue: savedGame ?? GameState())
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -114,33 +119,36 @@ struct GameView: View {
                     // This is the draggable copy that appears on top
                     draggedCardView
                 }
-                .disabled(showNewGameConfirmation || showNoMovesAlert || showWinAlert)
+                .disabled(showQuitGameConfirmation || showNoMovesAlert || showWinAlert)
                 
                 // --- Modals ---
-                if showNewGameConfirmation {
-                    ConfirmationSheetView(
-                        title: "New Game?",
-                        message: "Are you sure you want to leave your current game and start again?",
-                        confirmButtonTitle: "Yes, start a new game",
-                        cancelButtonTitle: "No, continue playing",
-                        confirmAction: {
+                if showQuitGameConfirmation {
+                    MinimalQuitModal(
+                        onQuitToMenu: {
                             withAnimation {
-                                gameState.newGame()
-                                showNewGameConfirmation = false
+                                gameState.clearSavedGameState()
+                                showQuitGameConfirmation = false
+                                presentationMode.wrappedValue.dismiss()
                             }
                         },
-                        cancelAction: {
+                        onNewGame: {
                             withAnimation {
-                                showNewGameConfirmation = false
+                                gameState.newGame()
+                                showQuitGameConfirmation = false
+                            }
+                        },
+                        onCancel: {
+                            withAnimation {
+                                showQuitGameConfirmation = false
                             }
                         }
                     )
                 }
                 
                 if showNoMovesAlert {
-                    ConfirmationSheetView(
+                    MinimalConfirmationModal(
                         title: "No More Moves",
-                        message: "You've run out of moves.",
+                        message: "You've run out of moves. Would you like to start a new game?",
                         confirmButtonTitle: "New Game",
                         cancelButtonTitle: "OK",
                         confirmAction: {
@@ -158,18 +166,15 @@ struct GameView: View {
                 }
                 
                 if showWinAlert {
-                    ConfirmationSheetView(
-                        title: "Congratulations!",
-                        message: "You won in \(gameState.moves) moves!",
-                        confirmButtonTitle: "New Game",
-                        cancelButtonTitle: "OK",
-                        confirmAction: {
+                    MinimalWinModal(
+                        moves: gameState.moves,
+                        onNewGame: {
                             withAnimation {
                                 gameState.newGame()
                                 showWinAlert = false
                             }
                         },
-                        cancelAction: {
+                        onContinue: {
                             withAnimation {
                                 showWinAlert = false
                             }
@@ -240,19 +245,52 @@ struct GameView: View {
             VStack(alignment: .leading) {
                 Text("Moves: \(gameState.moves)")
                     .font(.callout)
-                    .foregroundColor(.gray)
+                    .fontWeight(.medium)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.white, .white.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(.white.opacity(0.2), lineWidth: 0.8)
+                            }
+                    }
+                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
             }
             
             Spacer()
             
             VStack(alignment: .trailing) {
-                Button("New Game") {
-                    withAnimation {
-                        showNewGameConfirmation = true
+                Button(action: {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                        showQuitGameConfirmation = true
                     }
+                }) {
+                    Text("Quit Game")
+                        .font(.callout)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(.thinMaterial)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(.red.opacity(0.2), lineWidth: 0.5)
+                                }
+                        }
+                        .shadow(color: .red.opacity(0.1), radius: 4, x: 0, y: 2)
                 }
-                .font(.callout)
-                .foregroundColor(.white)
+                .buttonStyle(.plain)
             }
         }
     }
@@ -505,6 +543,7 @@ struct GameView: View {
                     }
                 }
                 gameState.moves += 1
+                gameState.saveGameState()
             }
             
             return true
@@ -566,6 +605,245 @@ struct GameView: View {
         selectedCardIndex = nil
     }
     
+}
+
+struct MinimalQuitModal: View {
+    let onQuitToMenu: () -> Void
+    let onNewGame: () -> Void
+    let onCancel: () -> Void
+    
+    var body: some View {
+        ZStack {
+            // Simple black overlay
+            Color.black.opacity(0.9)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onCancel)
+            
+            VStack(spacing: 40) {
+                VStack(spacing: 8) {
+                    Text("Quit Game")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+//                    Text("Are you sure you'd like to quit?")
+//                        .font(.title2)
+//                        .foregroundColor(.gray)
+                }
+                
+                VStack(spacing: 20) {
+                    // Quit to Main Menu - White button
+                    Button(action: onQuitToMenu) {
+                        Text("Quit to Main Menu")
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.white)
+                            .cornerRadius(25)
+                    }
+                    
+                    // Start New Game - Red outline
+                    Button(action: onNewGame) {
+                        Text("Start New Game")
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.clear)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 25)
+                                    .stroke(Color.red, lineWidth: 2)
+                            )
+                    }
+                    
+                    // Continue Playing - White outline
+                    Button(action: onCancel) {
+                        Text("Continue Playing")
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.clear)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 25)
+                                    .stroke(Color.white, lineWidth: 2)
+                            )
+                    }
+                }
+            }
+            .padding(.horizontal, 40)
+        }
+    }
+}
+
+struct CleanGlassButton: View {
+    let title: String
+    let icon: String
+    let color: Color
+    let action: () -> Void
+    
+    @State private var isPressed = false
+    
+    var body: some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                action()
+            }
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .medium))
+                Text(title)
+                    .font(.body)
+                    .fontWeight(.medium)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 20)
+            .background {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.thinMaterial)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(color.opacity(0.3), lineWidth: 1)
+                    }
+            }
+            .foregroundStyle(color)
+            .shadow(color: color.opacity(0.1), radius: 8, x: 0, y: 4)
+            .scaleEffect(isPressed ? 0.98 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onTapGesture {
+            withAnimation(.easeOut(duration: 0.1)) {
+                isPressed = true
+            }
+            withAnimation(.easeOut(duration: 0.1).delay(0.1)) {
+                isPressed = false
+            }
+        }
+    }
+}
+
+struct MinimalConfirmationModal: View {
+    let title: String
+    let message: String
+    let confirmButtonTitle: String
+    let cancelButtonTitle: String
+    let confirmAction: () -> Void
+    let cancelAction: () -> Void
+    
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.7)
+                .ignoresSafeArea()
+                .onTapGesture(perform: cancelAction)
+            
+            VStack(spacing: 30) {
+                VStack(spacing: 8) {
+                    Text(title)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                    
+                    Text(message)
+                        .font(.body)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                }
+                
+                VStack(spacing: 16) {
+                    Button(action: confirmAction) {
+                        Text(confirmButtonTitle)
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.white)
+                            .cornerRadius(25)
+                    }
+                    
+                    Button(action: cancelAction) {
+                        Text(cancelButtonTitle)
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.clear)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 25)
+                                    .stroke(Color.white, lineWidth: 2)
+                            )
+                    }
+                }
+            }
+            .padding(.horizontal, 40)
+        }
+    }
+}
+
+struct MinimalWinModal: View {
+    let moves: Int
+    let onNewGame: () -> Void
+    let onContinue: () -> Void
+    
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.7)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onContinue)
+            
+            VStack(spacing: 40) {
+                VStack(spacing: 16) {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 60))
+                        .foregroundColor(.yellow)
+                    
+                    Text("Congratulations!")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Text("You won in \(moves) moves!")
+                        .font(.title2)
+                        .foregroundColor(.gray)
+                }
+                
+                VStack(spacing: 20) {
+                    Button(action: onNewGame) {
+                        Text("New Game")
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.white)
+                            .cornerRadius(25)
+                    }
+                    
+                    Button(action: onContinue) {
+                        Text("Continue")
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.clear)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 25)
+                                    .stroke(Color.white, lineWidth: 2)
+                            )
+                    }
+                }
+            }
+            .padding(.horizontal, 40)
+        }
+    }
 }
 
 #Preview {

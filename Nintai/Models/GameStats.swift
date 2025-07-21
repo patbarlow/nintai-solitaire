@@ -54,16 +54,6 @@ class GameStats: ObservableObject {
         saveStats()
     }
     
-    func resetStats() {
-        gamesPlayed = 0
-        gamesWon = 0
-        totalMoves = 0
-        bestMoves = 0
-        currentStreak = 0
-        longestStreak = 0
-        saveStats()
-    }
-    
     private func saveStats() {
         let userDefaults = UserDefaults.standard
         userDefaults.set(gamesPlayed, forKey: "gamesPlayed")

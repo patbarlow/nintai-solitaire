@@ -15,6 +15,15 @@ enum Suit: String, CaseIterable, Codable {
         }
     }
     
+    var symbolName: String {
+        switch self {
+        case .hearts: "suit.heart.fill"
+        case .diamonds: "suit.diamond.fill"
+        case .clubs: "suit.club.fill"
+        case .spades: "suit.spade.fill"
+        }
+    }
+    
     var color: CardColor {
         switch self {
         case .hearts, .diamonds:
