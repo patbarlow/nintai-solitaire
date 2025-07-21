@@ -13,15 +13,22 @@ struct CardView: View {
     
     var body: some View {
         ZStack {
-            // Card background
+            // Enhanced card background with depth
             RoundedRectangle(cornerRadius: width * 0.13)
-                .fill(card.isFaceUp ? Color.white : cardBackColor)
+                .fill(card.isFaceUp ? AnyShapeStyle(Color.white) : AnyShapeStyle(cardBackGradient))
                 .frame(width: width, height: height)
-                .overlay(
+                .overlay {
+                    // Simple border
                     RoundedRectangle(cornerRadius: width * 0.13)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
-                )
-                .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
+                        .stroke(
+                            card.isFaceUp 
+                                ? Color.gray.opacity(0.3)
+                                : Color.white.opacity(0.5),
+                            lineWidth: 0.5
+                        )
+                }
+                .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 2)
+                .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 4)
 
             if card.isFaceUp {
                 cardFront
@@ -35,30 +42,61 @@ struct CardView: View {
         .frame(width: width, height: height)
     }
     
-    private var cardBackColor: Color {
-        Color(red: 0.8, green: 0.2, blue: 0.2)
+    private var cardBackGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.9, green: 0.25, blue: 0.25),
+                Color(red: 0.7, green: 0.15, blue: 0.15)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
     
     private var cardBack: some View {
         ZStack {
-            // Decorative border
+            // Enhanced decorative border with depth
             RoundedRectangle(cornerRadius: width * 0.09)
-                .stroke(Color.white.opacity(0.9), lineWidth: 1)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.9), Color.white.opacity(0.6)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.2
+                )
                 .padding(width * 0.09)
             
-            // Inner pattern
+            // Enhanced inner pattern
             RoundedRectangle(cornerRadius: width * 0.07)
-                .stroke(Color.white.opacity(0.6), lineWidth: 0.5)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.7), Color.white.opacity(0.4)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.6
+                )
                 .padding(width * 0.13)
             
-            // Center diamond pattern
+            // Enhanced center diamond pattern with depth
             VStack(spacing: width * 0.04) {
-                ForEach(0..<3, id: \.self) { _ in
+                ForEach(0..<3, id: \.self) { row in
                     HStack(spacing: width * 0.04) {
-                        ForEach(0..<3, id: \.self) { _ in
+                        ForEach(0..<3, id: \.self) { col in
                             Diamond()
-                                .fill(Color.white.opacity(0.4))
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.white.opacity(0.5),
+                                            Color.white.opacity(0.3)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
                                 .frame(width: width * 0.08, height: width * 0.08)
+                                .shadow(color: .black.opacity(0.2), radius: 1, x: 0.5, y: 0.5)
                         }
                     }
                 }
@@ -71,6 +109,7 @@ struct CardView: View {
             HStack {
                 Text(card.rank.displayValue)
                     .font(.system(size: rankFontSize, weight: .semibold))
+                    .foregroundColor(card.isRed ? .red : .black)
                 Spacer()
             }
             
@@ -82,7 +121,6 @@ struct CardView: View {
             }
         }
         .padding(width * 0.1)
-        .foregroundColor(card.isRed ? .softRed : .black)
     }
     
     private var rankFontSize: CGFloat {
@@ -103,10 +141,18 @@ struct SuitSymbol: View {
     let size: CGFloat
     
     var body: some View {
-        Image(suit.assetName)
-            .resizable()
-            .scaledToFit()
-            .frame(width: size, height: size)
+        Image(systemName: suit.symbolName)
+            .font(.system(size: size))
+            .foregroundColor(suit.color.swiftUIColor)
+    }
+}
+
+extension CardColor {
+    var swiftUIColor: Color {
+        switch self {
+        case .red: return .red
+        case .black: return .black
+        }
     }
 }
 
@@ -133,10 +179,9 @@ struct EmptyCardSlot: View {
     
     var body: some View {
         RoundedRectangle(cornerRadius: width * 0.13)
-            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+            .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
             .fill(Color.clear)
             .frame(width: width, height: height)
-            .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 0.5)
     }
 }
 
