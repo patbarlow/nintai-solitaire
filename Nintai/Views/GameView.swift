@@ -160,7 +160,7 @@ struct GameView: View {
                 if showWinAlert {
                     ConfirmationSheetView(
                         title: "Congratulations!",
-                        message: "You won! Final score: \(gameState.score)",
+                        message: "You won in \(gameState.moves) moves!",
                         confirmButtonTitle: "New Game",
                         cancelButtonTitle: "OK",
                         confirmAction: {
@@ -239,9 +239,6 @@ struct GameView: View {
         HStack {
             VStack(alignment: .leading) {
                 Text("Moves: \(gameState.moves)")
-                    .font(.callout)
-                    .foregroundColor(.gray)
-                Text("Score: \(gameState.score)")
                     .font(.callout)
                     .foregroundColor(.gray)
             }
@@ -544,7 +541,6 @@ struct GameView: View {
                         if let lastCard = gameState.tableau[fromColumn].last, !lastCard.isFaceUp {
                             let faceUpCard = Card(suit: lastCard.suit, rank: lastCard.rank, isFaceUp: true)
                             gameState.tableau[fromColumn][gameState.tableau[fromColumn].count - 1] = faceUpCard
-                            gameState.score += 5
                             HapticManager.shared.cardFlip()
                         }
                     }
