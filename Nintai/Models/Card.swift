@@ -1,6 +1,6 @@
 import Foundation
 
-enum Suit: String, CaseIterable {
+enum Suit: String, CaseIterable, Codable {
     case hearts = "♥"
     case diamonds = "♦"
     case clubs = "♣"
@@ -30,7 +30,7 @@ enum CardColor {
     case black
 }
 
-enum Rank: Int, CaseIterable {
+enum Rank: Int, CaseIterable, Codable {
     case ace = 1
     case two, three, four, five, six, seven, eight, nine, ten
     case jack = 11

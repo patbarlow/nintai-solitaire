@@ -7,7 +7,6 @@ class GameState: ObservableObject {
     @Published var waste: [Card] = []
     @Published var tableau: [[Card]] = Array(repeating: [], count: 7)
     @Published var foundations: [[Card]] = Array(repeating: [], count: 4)
-    @Published var score: Int = 0
     @Published var moves: Int = 0
     @Published var gameWon: Bool = false
     @Published var startTime: Date?
@@ -23,7 +22,6 @@ class GameState: ObservableObject {
         waste = []
         tableau = Array(repeating: [], count: 7)
         foundations = Array(repeating: [], count: 4)
-        score = 0
         moves = 0
         gameWon = false
         noMovesLeft = false
@@ -68,6 +66,7 @@ class GameState: ObservableObject {
             waste.append(faceUpCard)
         }
         moves += 1
+        saveGameState()
         
         Task {
             await checkForNoMoves()
@@ -109,7 +108,6 @@ class GameState: ObservableObject {
     
     func moveToFoundation(card: Card, foundationIndex: Int) {
         foundations[foundationIndex].append(card)
-        score += 10
         moves += 1
         checkForWin()
         
@@ -126,7 +124,6 @@ class GameState: ObservableObject {
         if let lastCard = tableau[sourceColumn].last, !lastCard.isFaceUp {
             let faceUpCard = Card(suit: lastCard.suit, rank: lastCard.rank, isFaceUp: true)
             tableau[sourceColumn][tableau[sourceColumn].count - 1] = faceUpCard
-            score += 5
         }
         
         moves += 1
@@ -137,34 +134,19 @@ class GameState: ObservableObject {
     }
     
     private func checkForWin() {
-        let wasWon = gameWon
+        _ = gameWon
         gameWon = foundations.allSatisfy { $0.count == 13 }
-        if gameWon && !wasWon {
-            score += 1000
-        }
     }
     
     // Check for available moves
     func checkForNoMoves() async {
-        // If there are cards in the stock, there's always a move
-        if !stock.isEmpty {
+        // Don't check for no moves if the game is already won
+        if gameWon {
             if self.noMovesLeft != false {
                 self.noMovesLeft = false
             }
             return
         }
-        
-        // If stock is empty but waste can be recycled, there's a move
-        if stock.isEmpty && !waste.isEmpty && tableau.allSatisfy({ $0.isEmpty }) {
-            // This condition is a bit simplistic, but if you can recycle, that's a move.
-            // A more complex check would see if recycling *would* create a move.
-            // For now, we'll count recycling as a potential move.
-            if self.noMovesLeft != false {
-                 self.noMovesLeft = false
-            }
-            return
-        }
-
         // Check moves from waste to foundations
         if let topWasteCard = waste.last {
             for i in 0..<4 {
@@ -209,9 +191,160 @@ class GameState: ObservableObject {
             }
         }
         
+        // Check all cards in stock (draw pile) for potential moves
+        for stockCard in stock {
+            let faceUpCard = Card(suit: stockCard.suit, rank: stockCard.rank, isFaceUp: true)
+            
+            // Check if this stock card can move to any foundation
+            for i in 0..<4 {
+                if canMoveToFoundation(card: faceUpCard, foundationIndex: i) {
+                    if self.noMovesLeft != false { self.noMovesLeft = false }
+                    return
+                }
+            }
+            
+            // Check if this stock card can move to any tableau column
+            for i in 0..<7 {
+                if canMoveCard(from: faceUpCard, to: tableau[i].last) {
+                    if self.noMovesLeft != false { self.noMovesLeft = false }
+                    return
+                }
+            }
+        }
+        
+        // If stock is empty but waste can be recycled, check if recycling would create moves
+        if stock.isEmpty && !waste.isEmpty {
+            // Simulate recycling: all waste cards become stock (face down)
+            let recycledStock = waste.reversed()
+            
+            // Check if any recycled card could create a move
+            for card in recycledStock {
+                let faceUpCard = Card(suit: card.suit, rank: card.rank, isFaceUp: true)
+                
+                // Check foundations
+                for i in 0..<4 {
+                    if canMoveToFoundation(card: faceUpCard, foundationIndex: i) {
+                        if self.noMovesLeft != false { self.noMovesLeft = false }
+                        return
+                    }
+                }
+                
+                // Check tableau
+                for i in 0..<7 {
+                    if canMoveCard(from: faceUpCard, to: tableau[i].last) {
+                        if self.noMovesLeft != false { self.noMovesLeft = false }
+                        return
+                    }
+                }
+            }
+        }
+        
         // If we got here, no moves are left
         if self.noMovesLeft != true {
             self.noMovesLeft = true
         }
+    }
+    
+    // MARK: - Persistence
+    func saveGameState() {
+        let gameData: [String: Any] = [
+            "stock": stock.map { ["suit": $0.suit.rawValue, "rank": $0.rank.rawValue, "isFaceUp": $0.isFaceUp] },
+            "waste": waste.map { ["suit": $0.suit.rawValue, "rank": $0.rank.rawValue, "isFaceUp": $0.isFaceUp] },
+            "tableau": tableau.map { column in
+                column.map { ["suit": $0.suit.rawValue, "rank": $0.rank.rawValue, "isFaceUp": $0.isFaceUp] }
+            },
+            "foundations": foundations.map { column in
+                column.map { ["suit": $0.suit.rawValue, "rank": $0.rank.rawValue, "isFaceUp": $0.isFaceUp] }
+            },
+            "moves": moves,
+            "gameWon": gameWon,
+            "startTime": startTime?.timeIntervalSince1970 as Any,
+            "noMovesLeft": noMovesLeft
+        ]
+        
+        UserDefaults.standard.set(gameData, forKey: "savedGameState")
+    }
+    
+    static func loadGameState() -> GameState? {
+        guard let gameData = UserDefaults.standard.dictionary(forKey: "savedGameState") else {
+            return nil
+        }
+        
+        let gameState = GameState()
+        
+        // Load stock
+        if let stockData = gameData["stock"] as? [[String: Any]] {
+            gameState.stock = stockData.compactMap { cardData in
+                guard let suitRaw = cardData["suit"] as? String,
+                      let rankRaw = cardData["rank"] as? Int,
+                      let isFaceUp = cardData["isFaceUp"] as? Bool,
+                      let suit = Suit(rawValue: suitRaw),
+                      let rank = Rank(rawValue: rankRaw) else {
+                    return nil
+                }
+                return Card(suit: suit, rank: rank, isFaceUp: isFaceUp)
+            }
+        }
+        
+        // Load waste
+        if let wasteData = gameData["waste"] as? [[String: Any]] {
+            gameState.waste = wasteData.compactMap { cardData in
+                guard let suitRaw = cardData["suit"] as? String,
+                      let rankRaw = cardData["rank"] as? Int,
+                      let isFaceUp = cardData["isFaceUp"] as? Bool,
+                      let suit = Suit(rawValue: suitRaw),
+                      let rank = Rank(rawValue: rankRaw) else {
+                    return nil
+                }
+                return Card(suit: suit, rank: rank, isFaceUp: isFaceUp)
+            }
+        }
+        
+        // Load tableau
+        if let tableauData = gameData["tableau"] as? [[[String: Any]]] {
+            gameState.tableau = tableauData.map { columnData in
+                columnData.compactMap { cardData in
+                    guard let suitRaw = cardData["suit"] as? String,
+                          let rankRaw = cardData["rank"] as? Int,
+                          let isFaceUp = cardData["isFaceUp"] as? Bool,
+                          let suit = Suit(rawValue: suitRaw),
+                          let rank = Rank(rawValue: rankRaw) else {
+                        return nil
+                    }
+                    return Card(suit: suit, rank: rank, isFaceUp: isFaceUp)
+                }
+            }
+        }
+        
+        // Load foundations
+        if let foundationsData = gameData["foundations"] as? [[[String: Any]]] {
+            gameState.foundations = foundationsData.map { columnData in
+                columnData.compactMap { cardData in
+                    guard let suitRaw = cardData["suit"] as? String,
+                          let rankRaw = cardData["rank"] as? Int,
+                          let isFaceUp = cardData["isFaceUp"] as? Bool,
+                          let suit = Suit(rawValue: suitRaw),
+                          let rank = Rank(rawValue: rankRaw) else {
+                        return nil
+                    }
+                    return Card(suit: suit, rank: rank, isFaceUp: isFaceUp)
+                }
+            }
+        }
+        
+        // Load other properties
+        gameState.moves = gameData["moves"] as? Int ?? 0
+        gameState.gameWon = gameData["gameWon"] as? Bool ?? false
+        gameState.noMovesLeft = gameData["noMovesLeft"] as? Bool ?? false
+        
+        if let startTimeInterval = gameData["startTime"] as? TimeInterval {
+            gameState.startTime = Date(timeIntervalSince1970: startTimeInterval)
+        }
+        
+        return gameState
+    }
+    
+    func clearSavedGameState() {
+        UserDefaults.standard.removeObject(forKey: "savedGameState")
     }
 }
