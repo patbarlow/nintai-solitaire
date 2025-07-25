@@ -101,6 +101,11 @@ struct GameView: View {
                 ZStack { // Original ZStack for game content
                     Color.black
                         .ignoresSafeArea()
+                        .onTapGesture {
+                            if selectedCard != nil && !isDragging {
+                                clearSelection()
+                            }
+                        }
                     
                     VStack(spacing: 20) {
                         headerSection
@@ -430,18 +435,14 @@ struct GameView: View {
                             }
                             .onEnded(onDragEnded)
                     )
-                    .simultaneousGesture(
+                    .highPriorityGesture(
                         TapGesture().onEnded {
                             if !isDragging {
-                                if selectedCard == nil {
-                                    if card.isFaceUp && canStartDrag(card: card, columnIndex: columnIndex, cardIndex: cardIndex) {
-                                        selectCard(card: card, fromColumn: columnIndex, cardIndex: cardIndex)
-                                    }
-                                } else if selectedFromColumn != nil {
-                                    if let selected = selectedCard {
-                                        _ = tryMoveToTableau(selectedCard: selected, columnIndex: columnIndex)
-                                    }
+                                if let selected = selectedCard {
+                                    _ = tryMoveToTableau(selectedCard: selected, columnIndex: columnIndex)
                                     clearSelection()
+                                } else if card.isFaceUp && canStartDrag(card: card, columnIndex: columnIndex, cardIndex: cardIndex) {
+                                    selectCard(card: card, fromColumn: columnIndex, cardIndex: cardIndex)
                                 }
                             }
                         }
