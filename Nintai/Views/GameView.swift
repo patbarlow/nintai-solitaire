@@ -445,6 +445,7 @@ struct GameView: View {
                         cardIndex == gameState.tableau[columnIndex].count - 1
                         ? Card(suit: card.suit, rank: card.rank, isFaceUp: false)
                         : card
+                 
 
                     CardView(card: displayCard, width: cardWidth, height: cardHeight)
                         .zIndex(Double(cardIndex))
