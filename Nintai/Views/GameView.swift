@@ -301,7 +301,7 @@ struct GameView: View {
                 ForEach(0..<4, id: \.self) { index in
                     ZStack {
                         EmptyCardSlot(width: cardWidth, height: cardHeight)
-                        
+
                         if let topCard = gameState.foundations[index].last {
                             CardView(card: topCard, width: cardWidth, height: cardHeight)
                         }
@@ -309,6 +309,12 @@ struct GameView: View {
                     .background(GeometryReader { geometry in
                         Color.clear.preference(key: FramePreferenceKey.self, value: [FramePreferenceData(viewType: .foundation, index: index, frame: geometry.frame(in: .global))])
                     })
+                    .onTapGesture {
+                        if !isDragging, let card = selectedCard {
+                            _ = tryMoveToFoundation(selectedCard: card, foundationIndex: index)
+                            clearSelection()
+                        }
+                    }
                 }
             }
             
@@ -319,11 +325,12 @@ struct GameView: View {
                 ZStack(alignment: .leading) {
                     // Show up to 3 cards with overlap
                     ForEach(Array(gameState.waste.suffix(3).enumerated()), id: \.element.id) { index, card in
-                        
+
                         let isBeingDragged = selectedCard?.id == card.id
-                        
+                        let isSelected = !isDragging && selectedFromColumn == -1 && selectedCard?.id == card.id
+
                         CardView(card: card, width: cardWidth, height: cardHeight)
-                            .offset(x: CGFloat(index) * 25) // Increased overlap spacing from 15 to 25
+                            .offset(x: CGFloat(index) * 25, y: isSelected ? -10 : 0) // Increased overlap spacing
                             .zIndex(Double(index))
                             .scaleEffect(isBeingDragged ? 1.05 : 1.0)
                             .opacity(isBeingDragged && isDragging ? 0 : 1)
@@ -343,6 +350,17 @@ struct GameView: View {
                                             dragOffset = value.translation
                                         }
                                         .onEnded(onDragEnded)
+                                )
+                                .simultaneousGesture(
+                                    TapGesture().onEnded {
+                                        if !isDragging {
+                                            if selectedCard?.id == card.id && selectedFromColumn == -1 {
+                                                clearSelection()
+                                            } else {
+                                                selectCard(card: card, fromColumn: -1, cardIndex: nil)
+                                            }
+                                        }
+                                    }
                                 )
                             }
                     }
@@ -382,6 +400,7 @@ struct GameView: View {
             ForEach(Array(gameState.tableau[columnIndex].enumerated()), id: \.element.id) { cardIndex, card in
                 
                 let isPartOfDraggedStack = selectedFromColumn == columnIndex && selectedCardIndex != nil && cardIndex >= selectedCardIndex!
+                let isPartOfSelectedStack = !isDragging && isPartOfDraggedStack
                 
                 // Calculate the offset based on all cards above this one
                 let offset = calculateCardOffset(columnIndex: columnIndex, cardIndex: cardIndex)
@@ -390,7 +409,7 @@ struct GameView: View {
                     .zIndex(Double(cardIndex))
                     .scaleEffect(isPartOfDraggedStack ? 1.05 : 1.0)
                     .opacity(isPartOfDraggedStack && isDragging ? 0 : 1)
-                    .offset(y: offset)
+                    .offset(y: offset + (isPartOfSelectedStack ? -10 : 0))
                     .gesture(
                         DragGesture(minimumDistance: 5, coordinateSpace: .global)
                             .onChanged { value in
@@ -411,6 +430,22 @@ struct GameView: View {
                             }
                             .onEnded(onDragEnded)
                     )
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            if !isDragging {
+                                if selectedCard == nil {
+                                    if card.isFaceUp && canStartDrag(card: card, columnIndex: columnIndex, cardIndex: cardIndex) {
+                                        selectCard(card: card, fromColumn: columnIndex, cardIndex: cardIndex)
+                                    }
+                                } else if selectedFromColumn != nil {
+                                    if let selected = selectedCard {
+                                        _ = tryMoveToTableau(selectedCard: selected, columnIndex: columnIndex)
+                                    }
+                                    clearSelection()
+                                }
+                            }
+                        }
+                    )
                     .animation(.easeInOut(duration: 0.2), value: gameState.tableau[columnIndex].count)
             }
             
@@ -420,6 +455,14 @@ struct GameView: View {
             }
         }
         .frame(width: cardWidth)
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                if !isDragging, let selected = selectedCard {
+                    _ = tryMoveToTableau(selectedCard: selected, columnIndex: columnIndex)
+                    clearSelection()
+                }
+            }
+        )
         .background(GeometryReader { geometry in
             Color.clear.preference(key: FramePreferenceKey.self, value: [FramePreferenceData(viewType: .tableau, index: columnIndex, frame: geometry.frame(in: .global))])
         })
@@ -442,7 +485,7 @@ struct GameView: View {
     
     @ViewBuilder
     private var draggedCardView: some View {
-        if let selectedCard = selectedCard {
+        if isDragging, let selectedCard = selectedCard {
             let position = CGPoint(x: dragStartPosition.x + dragOffset.width, y: dragStartPosition.y + dragOffset.height)
             
             if selectedFromColumn == -1 {
