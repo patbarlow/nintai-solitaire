@@ -311,6 +311,7 @@ struct GameView: View {
                             CardView(card: topCard, width: cardWidth, height: cardHeight)
                         }
                     }
+                    .contentShape(Rectangle())
                     .background(GeometryReader { geometry in
                         Color.clear.preference(key: FramePreferenceKey.self, value: [FramePreferenceData(viewType: .foundation, index: index, frame: geometry.frame(in: .global))])
                     })
@@ -335,9 +336,9 @@ struct GameView: View {
                         let isSelected = !isDragging && selectedFromColumn == -1 && selectedCard?.id == card.id
 
                         CardView(card: card, width: cardWidth, height: cardHeight)
-                            .offset(x: CGFloat(index) * 25, y: isSelected ? -10 : 0) // Increased overlap spacing
+                            .offset(x: CGFloat(index) * 25, y: isSelected ? -20 : 0)
                             .zIndex(Double(index))
-                            .scaleEffect(isBeingDragged ? 1.05 : 1.0)
+                            .scaleEffect(isBeingDragged ? 1.05 : (isSelected ? 1.1 : 1.0))
                             .opacity(isBeingDragged && isDragging ? 0 : 1)
                             .if(index == gameState.waste.suffix(3).count - 1) { view in
                                 view.gesture(
@@ -412,9 +413,9 @@ struct GameView: View {
                 
                 CardView(card: card, width: cardWidth, height: cardHeight)
                     .zIndex(Double(cardIndex))
-                    .scaleEffect(isPartOfDraggedStack ? 1.05 : 1.0)
+                    .scaleEffect(isPartOfDraggedStack ? 1.05 : (isPartOfSelectedStack ? 1.1 : 1.0))
                     .opacity(isPartOfDraggedStack && isDragging ? 0 : 1)
-                    .offset(y: offset + (isPartOfSelectedStack ? -10 : 0))
+                    .offset(y: offset + (isPartOfSelectedStack ? -20 : 0))
                     .gesture(
                         DragGesture(minimumDistance: 5, coordinateSpace: .global)
                             .onChanged { value in
@@ -437,13 +438,17 @@ struct GameView: View {
                     )
                     .highPriorityGesture(
                         TapGesture().onEnded {
-                            if !isDragging {
-                                if let selected = selectedCard {
+                            guard !isDragging else { return }
+
+                            if let selected = selectedCard {
+                                if selected.id == card.id && selectedFromColumn == columnIndex {
+                                    clearSelection()
+                                } else {
                                     _ = tryMoveToTableau(selectedCard: selected, columnIndex: columnIndex)
                                     clearSelection()
-                                } else if card.isFaceUp && canStartDrag(card: card, columnIndex: columnIndex, cardIndex: cardIndex) {
-                                    selectCard(card: card, fromColumn: columnIndex, cardIndex: cardIndex)
                                 }
+                            } else if card.isFaceUp && canStartDrag(card: card, columnIndex: columnIndex, cardIndex: cardIndex) {
+                                selectCard(card: card, fromColumn: columnIndex, cardIndex: cardIndex)
                             }
                         }
                     )
@@ -455,6 +460,7 @@ struct GameView: View {
                     .opacity(0.5)
             }
         }
+        .contentShape(Rectangle())
         .frame(width: cardWidth)
         .simultaneousGesture(
             TapGesture().onEnded {
