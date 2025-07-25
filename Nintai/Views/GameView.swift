@@ -66,7 +66,12 @@ class HapticManager {
 }
 
 struct GameView: View {
-    @StateObject private var gameState = GameState()
+    @StateObject private var gameState: GameState
+    private let isNewGame: Bool
+    @State private var dealtCards: [[Bool]] = []
+    @State private var flippedCards: [[Bool]] = []
+    @State private var showGameContent = false
+    @State private var isDealing = false
     @State private var selectedCard: Card?
     @State private var selectedFromColumn: Int?
     @State private var selectedCardIndex: Int?
@@ -92,7 +97,24 @@ struct GameView: View {
     let columnSpacing: CGFloat = 8 // Space between columns
     
     init(savedGame: GameState? = nil) {
-        _gameState = StateObject(wrappedValue: savedGame ?? GameState())
+        let state = savedGame ?? GameState()
+        _gameState = StateObject(wrappedValue: state)
+        isNewGame = savedGame == nil
+        if isNewGame {
+            _dealtCards = State(initialValue: state.tableau.map { column in column.map { _ in false } })
+            _flippedCards = State(initialValue: state.tableau.map { column in column.map { _ in false } })
+            _showGameContent = State(initialValue: false)
+            // ensure last cards start face down
+            for column in 0..<state.tableau.count {
+                if let lastIndex = state.tableau[column].indices.last {
+                    state.tableau[column][lastIndex].isFaceUp = false
+                }
+            }
+        } else {
+            _dealtCards = State(initialValue: state.tableau.map { column in column.map { _ in true } })
+            _flippedCards = State(initialValue: state.tableau.map { column in column.map { _ in true } })
+            _showGameContent = State(initialValue: true)
+        }
     }
     
     var body: some View {
@@ -124,7 +146,7 @@ struct GameView: View {
                     // This is the draggable copy that appears on top
                     draggedCardView
                 }
-                .disabled(showQuitGameConfirmation || showNoMovesAlert || showWinAlert)
+                .disabled(showQuitGameConfirmation || showNoMovesAlert || showWinAlert || isDealing)
                 
                 // --- Modals ---
                 if showQuitGameConfirmation {
@@ -187,8 +209,16 @@ struct GameView: View {
                     )
                 }
             }
+            .opacity(showGameContent ? 1 : 0)
             .onAppear {
                 calculateCardSize(geometry: geometry)
+                if isNewGame {
+                    startDealAnimation()
+                } else {
+                    withAnimation(.easeIn(duration: 0.2)) {
+                        showGameContent = true
+                    }
+                }
             }
             .onChange(of: geometry.size) { _, _ in
                 calculateCardSize(geometry: geometry)
@@ -404,57 +434,64 @@ struct GameView: View {
     private func tableauColumn(columnIndex: Int) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(gameState.tableau[columnIndex].enumerated()), id: \.element.id) { cardIndex, card in
-                
-                let isPartOfDraggedStack = selectedFromColumn == columnIndex && selectedCardIndex != nil && cardIndex >= selectedCardIndex!
-                let isPartOfSelectedStack = !isDragging && isPartOfDraggedStack
-                
-                // Calculate the offset based on all cards above this one
-                let offset = calculateCardOffset(columnIndex: columnIndex, cardIndex: cardIndex)
-                
-                CardView(card: card, width: cardWidth, height: cardHeight)
-                    .zIndex(Double(cardIndex))
-                    .scaleEffect(isPartOfDraggedStack ? 1.05 : (isPartOfSelectedStack ? 1.1 : 1.0))
-                    .opacity(isPartOfDraggedStack && isDragging ? 0 : 1)
-                    .offset(y: offset)
-                    .gesture(
-                        DragGesture(minimumDistance: 5, coordinateSpace: .global)
-                            .onChanged { value in
-                                if card.isFaceUp && canStartDrag(card: card, columnIndex: columnIndex, cardIndex: cardIndex) && !isDragging {
-                                    selectCard(card: card, fromColumn: columnIndex, cardIndex: cardIndex)
-                                    isDragging = true
-                                    // Calculate the offset from grab point to card center
-                                    // For tableau cards, we need to account for the stack height
-                                    let stackCount = gameState.tableau[columnIndex].count - (cardIndex)
-                                    let stackHeight = cardHeight + (CGFloat(stackCount - 1) * (cardHeight * 0.2))
-                                    let grabOffset = CGSize(width: cardWidth/2, height: stackHeight/2)
-                                    dragInitialOffset = grabOffset
-                                    dragStartPosition = CGPoint(x: value.startLocation.x - grabOffset.width, y: value.startLocation.y - grabOffset.height)
-                                }
-                                if isDragging {
-                                    dragOffset = value.translation
-                                }
-                            }
-                            .onEnded(onDragEnded)
-                    )
-                    .highPriorityGesture(
-                        TapGesture().onEnded {
-                            guard !isDragging else { return }
+                if dealtCards[columnIndex][cardIndex] {
+                    let isPartOfDraggedStack = selectedFromColumn == columnIndex && selectedCardIndex != nil && cardIndex >= selectedCardIndex!
+                    let isPartOfSelectedStack = !isDragging && isPartOfDraggedStack
 
-                            if let selected = selectedCard {
-                                if selectedFromColumn == columnIndex,
-                                   let selectedIndex = selectedCardIndex,
-                                   cardIndex >= selectedIndex {
-                                    clearSelection()
-                                } else {
-                                    _ = tryMoveToTableau(selectedCard: selected, columnIndex: columnIndex)
-                                    clearSelection()
+                    // Calculate the offset based on all cards above this one
+                    let offset = calculateCardOffset(columnIndex: columnIndex, cardIndex: cardIndex)
+
+                    var displayCard = card
+                    if isNewGame && !flippedCards[columnIndex][cardIndex] && cardIndex == gameState.tableau[columnIndex].count - 1 {
+                        displayCard = Card(suit: card.suit, rank: card.rank, isFaceUp: false)
+                    }
+
+                    CardView(card: displayCard, width: cardWidth, height: cardHeight)
+                        .zIndex(Double(cardIndex))
+                        .scaleEffect(isPartOfDraggedStack ? 1.05 : (isPartOfSelectedStack ? 1.1 : 1.0))
+                        .opacity(isPartOfDraggedStack && isDragging ? 0 : 1)
+                        .offset(y: offset)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .gesture(
+                            DragGesture(minimumDistance: 5, coordinateSpace: .global)
+                                .onChanged { value in
+                                    if card.isFaceUp && canStartDrag(card: card, columnIndex: columnIndex, cardIndex: cardIndex) && !isDragging {
+                                        selectCard(card: card, fromColumn: columnIndex, cardIndex: cardIndex)
+                                        isDragging = true
+                                        // Calculate the offset from grab point to card center
+                                        // For tableau cards, we need to account for the stack height
+                                        let stackCount = gameState.tableau[columnIndex].count - (cardIndex)
+                                        let stackHeight = cardHeight + (CGFloat(stackCount - 1) * (cardHeight * 0.2))
+                                        let grabOffset = CGSize(width: cardWidth/2, height: stackHeight/2)
+                                        dragInitialOffset = grabOffset
+                                        dragStartPosition = CGPoint(x: value.startLocation.x - grabOffset.width, y: value.startLocation.y - grabOffset.height)
+                                    }
+                                    if isDragging {
+                                        dragOffset = value.translation
+                                    }
                                 }
-                            } else if card.isFaceUp && canStartDrag(card: card, columnIndex: columnIndex, cardIndex: cardIndex) {
-                                selectCard(card: card, fromColumn: columnIndex, cardIndex: cardIndex)
+                                .onEnded(onDragEnded)
+                        )
+                        .highPriorityGesture(
+                            TapGesture().onEnded {
+                                guard !isDragging else { return }
+
+                                if let selected = selectedCard {
+                                    if selectedFromColumn == columnIndex,
+                                       let selectedIndex = selectedCardIndex,
+                                       cardIndex >= selectedIndex {
+                                        clearSelection()
+                                    } else {
+                                        _ = tryMoveToTableau(selectedCard: selected, columnIndex: columnIndex)
+                                        clearSelection()
+                                    }
+                                } else if card.isFaceUp && canStartDrag(card: card, columnIndex: columnIndex, cardIndex: cardIndex) {
+                                    selectCard(card: card, fromColumn: columnIndex, cardIndex: cardIndex)
+                                }
                             }
-                        }
-                    )
-                    .animation(.easeInOut(duration: 0.2), value: gameState.tableau[columnIndex].count)
+                        )
+                        .animation(.easeInOut(duration: 0.2), value: gameState.tableau[columnIndex].count)
+                }
             }
             
             if gameState.tableau[columnIndex].isEmpty {
@@ -657,6 +694,37 @@ struct GameView: View {
         selectedCard = nil
         selectedFromColumn = nil
         selectedCardIndex = nil
+    }
+
+    private func startDealAnimation() {
+        isDealing = true
+        var delay: Double = 0
+        let step: Double = 0.08
+
+        for column in 0..<dealtCards.count {
+            for row in 0..<dealtCards[column].count {
+                let isLast = row == dealtCards[column].count - 1
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        dealtCards[column][row] = true
+                        HapticManager.shared.cardMove()
+                    }
+                    if isLast {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                flippedCards[column][row] = true
+                                gameState.tableau[column][row].isFaceUp = true
+                                HapticManager.shared.cardFlip()
+                                if column == dealtCards.count - 1 {
+                                    isDealing = false
+                                }
+                            }
+                        }
+                    }
+                }
+                delay += step
+            }
+        }
     }
     
 }
