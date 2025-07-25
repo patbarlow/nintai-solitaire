@@ -699,6 +699,9 @@ struct GameView: View {
 
     private func startDealAnimation() {
         isDealing = true
+        withAnimation(.easeIn(duration: 0.2)) {
+            showGameContent = true
+        }
         var delay: Double = 0
         let step: Double = 0.08
 
