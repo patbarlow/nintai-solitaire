@@ -464,18 +464,16 @@ struct GameView: View {
         }
         .contentShape(Rectangle())
         .frame(width: cardWidth)
-        .simultaneousGesture(
-            TapGesture().onEnded {
-                if !isDragging, let selected = selectedCard {
-                    if selectedFromColumn == columnIndex {
-                        clearSelection()
-                    } else {
-                        _ = tryMoveToTableau(selectedCard: selected, columnIndex: columnIndex)
-                        clearSelection()
-                    }
+        .onTapGesture {
+            if !isDragging, let selected = selectedCard {
+                if selectedFromColumn == columnIndex {
+                    clearSelection()
+                } else {
+                    _ = tryMoveToTableau(selectedCard: selected, columnIndex: columnIndex)
+                    clearSelection()
                 }
             }
-        )
+        }
         .background(GeometryReader { geometry in
             Color.clear.preference(key: FramePreferenceKey.self, value: [FramePreferenceData(viewType: .tableau, index: columnIndex, frame: geometry.frame(in: .global))])
         })
