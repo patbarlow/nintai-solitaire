@@ -441,10 +441,11 @@ struct GameView: View {
                     // Calculate the offset based on all cards above this one
                     let offset = calculateCardOffset(columnIndex: columnIndex, cardIndex: cardIndex)
 
-                    var displayCard = card
-                    if isNewGame && !flippedCards[columnIndex][cardIndex] && cardIndex == gameState.tableau[columnIndex].count - 1 {
-                        displayCard = Card(suit: card.suit, rank: card.rank, isFaceUp: false)
-                    }
+                    let displayCard: Card = isNewGame && !flippedCards[columnIndex][cardIndex] &&
+                        cardIndex == gameState.tableau[columnIndex].count - 1
+                        ? Card(suit: card.suit, rank: card.rank, isFaceUp: false)
+                        : card
+                 
 
                     CardView(card: displayCard, width: cardWidth, height: cardHeight)
                         .zIndex(Double(cardIndex))
