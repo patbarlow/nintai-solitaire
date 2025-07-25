@@ -179,8 +179,11 @@ struct EmptyCardSlot: View {
     
     var body: some View {
         RoundedRectangle(cornerRadius: width * 0.13)
-            .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
             .fill(Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: width * 0.13)
+                    .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
+            )
             .frame(width: width, height: height)
     }
 }
