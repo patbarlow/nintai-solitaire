@@ -667,6 +667,9 @@ struct GameView: View {
                 gameState.moves += 1
                 gameState.saveGameState()
                 syncAnimationArrays()
+                if fromColumn >= 0 {
+                    updateFlippedCard(for: fromColumn)
+                }
             }
             
             return true
@@ -712,6 +715,9 @@ struct GameView: View {
 
                 gameState.moveToFoundation(card: selectedCard, foundationIndex: targetFoundationIndex)
                 syncAnimationArrays()
+                if fromColumn >= 0 {
+                    updateFlippedCard(for: fromColumn)
+                }
             }
             
             return true
@@ -752,6 +758,18 @@ struct GameView: View {
         }
     }
 
+    private func updateFlippedCard(for column: Int) {
+        guard column >= 0,
+              column < gameState.tableau.count,
+              let lastIndex = gameState.tableau[column].indices.last,
+              column < flippedCards.count,
+              lastIndex < flippedCards[column].count else { return }
+
+        if gameState.tableau[column][lastIndex].isFaceUp {
+            flippedCards[column][lastIndex] = true
+        }
+    }
+
     private func resetForNewGame() {
         dealtCards = gameState.tableau.map { column in column.map { _ in false } }
         flippedCards = gameState.tableau.map { column in column.map { _ in false } }
@@ -764,32 +782,36 @@ struct GameView: View {
         withAnimation(.easeIn(duration: 0.2)) {
             showGameContent = true
         }
-        var delay: Double = 0
         let step: Double = 0.08
+        let maxRows = dealtCards.map { $0.count }.max() ?? 0
+        var maxDelay: Double = 0
 
-        for column in 0..<dealtCards.count {
-            for row in 0..<dealtCards[column].count {
-                let isLast = row == dealtCards[column].count - 1
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+        for row in 0..<maxRows {
+            let rowDelay = Double(row) * step
+            for column in 0..<dealtCards.count {
+                guard row < dealtCards[column].count else { continue }
+                DispatchQueue.main.asyncAfter(deadline: .now() + rowDelay) {
                     withAnimation(.easeOut(duration: 0.25)) {
                         dealtCards[column][row] = true
                         HapticManager.shared.cardMove()
                     }
-                    if isLast {
+
+                    if row == dealtCards[column].count - 1 {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 flippedCards[column][row] = true
                                 gameState.tableau[column][row].isFaceUp = true
                                 HapticManager.shared.cardFlip()
-                                if column == dealtCards.count - 1 {
-                                    isDealing = false
-                                }
                             }
                         }
                     }
                 }
-                delay += step
+                if rowDelay > maxDelay { maxDelay = rowDelay }
             }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + maxDelay + 0.45) {
+            isDealing = false
         }
     }
     
