@@ -123,9 +123,8 @@ class GameState: ObservableObject {
         tableau[sourceColumn].removeLast(cardsToMove.count)
         tableau[destColumn].append(contentsOf: cardsToMove)
         
-        if let lastCard = tableau[sourceColumn].last, !lastCard.isFaceUp {
-            let faceUpCard = Card(suit: lastCard.suit, rank: lastCard.rank, isFaceUp: true)
-            tableau[sourceColumn][tableau[sourceColumn].count - 1] = faceUpCard
+        if !tableau[sourceColumn].isEmpty && !tableau[sourceColumn].last!.isFaceUp {
+            tableau[sourceColumn][tableau[sourceColumn].count - 1].isFaceUp = true
         }
         
         moves += 1

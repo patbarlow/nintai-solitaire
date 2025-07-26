@@ -4,42 +4,42 @@ struct CardView: View {
     let card: Card
     let width: CGFloat
     let height: CGFloat
-    
+
+    @State private var isFaceUpInternal: Bool
+    @State private var isFlipping = false
+
     init(card: Card, width: CGFloat = 45, height: CGFloat = 63) {
         self.card = card
         self.width = width
         self.height = height
+        _isFaceUpInternal = State(initialValue: card.isFaceUp)
     }
     
     var body: some View {
         ZStack {
-            // Enhanced card background with depth
-            RoundedRectangle(cornerRadius: width * 0.13)
-                .fill(card.isFaceUp ? AnyShapeStyle(Color.white) : AnyShapeStyle(cardBackGradient))
-                .frame(width: width, height: height)
-                .overlay {
-                    // Simple border
-                    RoundedRectangle(cornerRadius: width * 0.13)
-                        .stroke(
-                            card.isFaceUp 
-                                ? Color.gray.opacity(0.3)
-                                : Color.white.opacity(0.5),
-                            lineWidth: 0.5
-                        )
-                }
-                .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 2)
-                .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 4)
+            frontFace
+                .opacity(isFaceUpInternal ? 1 : 0)
+                .rotation3DEffect(.degrees(isFaceUpInternal ? 0 : -180), axis: (x: 0, y: 1, z: 0))
 
-            if card.isFaceUp {
-                cardFront
-                    .frame(width: width, height: height)
-                    .clipShape(RoundedRectangle(cornerRadius: width * 0.13))
-            } else {
-                cardBack
-                    .frame(width: width, height: height)
-            }
+            backFace
+                .opacity(isFaceUpInternal ? 0 : 1)
+                .rotation3DEffect(.degrees(isFaceUpInternal ? 180 : 0), axis: (x: 0, y: 1, z: 0))
         }
         .frame(width: width, height: height)
+        .scaleEffect(isFlipping ? 1.1 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isFlipping)
+        .onChange(of: card.isFaceUp) { _, newValue in
+            guard newValue != isFaceUpInternal else { return }
+            isFlipping = true
+            withAnimation(.easeInOut(duration: 0.35)) {
+                isFaceUpInternal = newValue
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isFlipping = false
+                }
+            }
+        }
     }
     
     private var cardBackGradient: LinearGradient {
@@ -51,6 +51,41 @@ struct CardView: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+
+    private var frontFace: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: width * 0.13)
+                .fill(Color.white)
+                .frame(width: width, height: height)
+                .overlay {
+                    RoundedRectangle(cornerRadius: width * 0.13)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 2)
+                .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 4)
+
+            cardFront
+                .frame(width: width, height: height)
+                .clipShape(RoundedRectangle(cornerRadius: width * 0.13))
+        }
+    }
+
+    private var backFace: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: width * 0.13)
+                .fill(cardBackGradient)
+                .frame(width: width, height: height)
+                .overlay {
+                    RoundedRectangle(cornerRadius: width * 0.13)
+                        .stroke(Color.white.opacity(0.5), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 2)
+                .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 4)
+
+            cardBack
+                .frame(width: width, height: height)
+        }
     }
     
     private var cardBack: some View {

@@ -669,9 +669,8 @@ struct GameView: View {
                     if let fromIndex = selectedCardIndex {
                         gameState.tableau[fromColumn].removeLast(gameState.tableau[fromColumn].count - fromIndex)
                         // Flip the next card if needed
-                        if let lastCard = gameState.tableau[fromColumn].last, !lastCard.isFaceUp {
-                            let faceUpCard = Card(suit: lastCard.suit, rank: lastCard.rank, isFaceUp: true)
-                            gameState.tableau[fromColumn][gameState.tableau[fromColumn].count - 1] = faceUpCard
+                        if !gameState.tableau[fromColumn].isEmpty && !gameState.tableau[fromColumn].last!.isFaceUp {
+                            gameState.tableau[fromColumn][gameState.tableau[fromColumn].count - 1].isFaceUp = true
                             HapticManager.shared.cardFlip()
                         }
                     }
