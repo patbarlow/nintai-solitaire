@@ -68,6 +68,7 @@ class GameState: ObservableObject {
             waste.append(faceUpCard)
         }
         moves += 1
+        GameStats.shared.recordMove()
         saveGameState()
         
         Task {
@@ -112,6 +113,7 @@ class GameState: ObservableObject {
         objectWillChange.send()
         foundations[foundationIndex].append(card)
         moves += 1
+        GameStats.shared.recordMove()
         saveGameState()
         checkForWin()
         
@@ -133,6 +135,7 @@ class GameState: ObservableObject {
         }
         
         moves += 1
+        GameStats.shared.recordMove()
         saveGameState()
         
         Task {
@@ -291,6 +294,7 @@ class GameState: ObservableObject {
                             tableau[colIndex].removeLast()
                             foundations[foundIndex].append(topCard)
                             moves += 1
+                            GameStats.shared.recordMove()
                             saveGameState()
                             checkForWin()
                             
@@ -311,6 +315,7 @@ class GameState: ObservableObject {
                         waste.removeLast()
                         foundations[foundIndex].append(topWasteCard)
                         moves += 1
+                        GameStats.shared.recordMove()
                         saveGameState()
                         checkForWin()
                         
