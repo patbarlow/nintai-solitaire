@@ -49,6 +49,7 @@ class GameState: ObservableObject {
     }
     
     func drawFromStock() {
+        objectWillChange.send()
         guard !stock.isEmpty else {
             if !waste.isEmpty {
                 stock = waste.reversed().map { card in
@@ -108,6 +109,7 @@ class GameState: ObservableObject {
     }
     
     func moveToFoundation(card: Card, foundationIndex: Int) {
+        objectWillChange.send()
         foundations[foundationIndex].append(card)
         moves += 1
         saveGameState()
@@ -119,12 +121,15 @@ class GameState: ObservableObject {
     }
     
     func moveCards(from sourceColumn: Int, cardIndex: Int, to destColumn: Int) {
+        objectWillChange.send()
         let cardsToMove = Array(tableau[sourceColumn].suffix(from: cardIndex))
         tableau[sourceColumn].removeLast(cardsToMove.count)
         tableau[destColumn].append(contentsOf: cardsToMove)
-        
+
         if !tableau[sourceColumn].isEmpty && !tableau[sourceColumn].last!.isFaceUp {
-            tableau[sourceColumn][tableau[sourceColumn].count - 1].isFaceUp = true
+            var column = tableau[sourceColumn]
+            column[column.count - 1].isFaceUp = true
+            tableau[sourceColumn] = column
         }
         
         moves += 1

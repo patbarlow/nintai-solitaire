@@ -615,12 +615,13 @@ struct GameView: View {
     
     private func tryMoveToTableau(selectedCard: Card, columnIndex: Int) -> Bool {
         guard let fromColumn = selectedFromColumn else { return false }
-        
+
         let targetColumn = gameState.tableau[columnIndex]
         let targetCard = targetColumn.last
-        
+
         if gameState.canMoveCard(from: selectedCard, to: targetCard) {
             HapticManager.shared.cardMove()
+            gameState.objectWillChange.send()
             withAnimation(.easeInOut(duration: 0.2)) {
                 if fromColumn == -1 {
                     // Moving from waste pile
@@ -658,6 +659,7 @@ struct GameView: View {
         
         if gameState.canMoveToFoundation(card: selectedCard, foundationIndex: targetFoundationIndex) {
             HapticManager.shared.cardMove()
+            gameState.objectWillChange.send()
             withAnimation(.easeInOut(duration: 0.2)) {
                 if fromColumn == -1 {
                     // Moving from waste pile
@@ -670,7 +672,9 @@ struct GameView: View {
                         gameState.tableau[fromColumn].removeLast(gameState.tableau[fromColumn].count - fromIndex)
                         // Flip the next card if needed
                         if !gameState.tableau[fromColumn].isEmpty && !gameState.tableau[fromColumn].last!.isFaceUp {
-                            gameState.tableau[fromColumn][gameState.tableau[fromColumn].count - 1].isFaceUp = true
+                            var column = gameState.tableau[fromColumn]
+                            column[column.count - 1].isFaceUp = true
+                            gameState.tableau[fromColumn] = column
                             HapticManager.shared.cardFlip()
                         }
                     }
