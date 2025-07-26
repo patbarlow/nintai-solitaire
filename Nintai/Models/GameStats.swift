@@ -31,9 +31,13 @@ class GameStats: ObservableObject {
         saveStats()
     }
     
+    func recordMove() {
+        totalMoves += 1
+        saveStats()
+    }
+
     func recordGameWin(moves: Int) {
         gamesWon += 1
-        totalMoves += moves
         currentStreak += 1
         
         if bestMoves == 0 || moves < bestMoves {
@@ -48,7 +52,6 @@ class GameStats: ObservableObject {
     }
     
     func recordGameLoss(moves: Int) {
-        totalMoves += moves
         currentStreak = 0
         print("DEBUG: recordGameLoss called, moves: \(moves), games played: \(gamesPlayed), total moves: \(totalMoves)")
         saveStats()
