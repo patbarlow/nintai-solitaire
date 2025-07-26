@@ -93,6 +93,7 @@ struct GameView: View {
     @State private var showQuitGameConfirmation = false
     @State private var showNoMovesAlert = false
     @State private var showWinAlert = false
+    @State private var showSettingsMenu = false
     
     // Dynamic sizing based on screen width
     @State private var cardWidth: CGFloat = 45
@@ -152,9 +153,22 @@ struct GameView: View {
                     // This is the draggable copy that appears on top
                     draggedCardView
                 }
-                .disabled(showQuitGameConfirmation || showNoMovesAlert || showWinAlert || isDealing)
+                .disabled(showQuitGameConfirmation || showNoMovesAlert || showWinAlert || isDealing || showSettingsMenu)
                 
                 // --- Modals ---
+                if showSettingsMenu {
+                    GameSettingsMenu(moveMode: $moveMode, onQuit: {
+                        withAnimation {
+                            showSettingsMenu = false
+                            showQuitGameConfirmation = true
+                        }
+                    }, onDismiss: {
+                        withAnimation {
+                            showSettingsMenu = false
+                        }
+                    })
+                }
+
                 if showQuitGameConfirmation {
                     MinimalQuitModal(
                         onQuitToMenu: {
@@ -312,39 +326,21 @@ struct GameView: View {
             
             Spacer()
 
-            Picker("Move Mode", selection: $moveMode) {
-                Text("Drag").tag(MoveMode.drag)
-                Text("Tap").tag(MoveMode.tap)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 150)
-
-            Spacer()
-
-            VStack(alignment: .trailing) {
-                Button(action: {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                        showQuitGameConfirmation = true
-                    }
-                }) {
-                    Text("Quit Game")
-                        .font(.callout)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.red)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(.thinMaterial)
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(.red.opacity(0.2), lineWidth: 0.5)
-                                }
-                        }
-                        .shadow(color: .red.opacity(0.1), radius: 4, x: 0, y: 2)
+            Button(action: {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                    showSettingsMenu = true
                 }
-                .buttonStyle(.plain)
+            }) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(10)
+                    .background {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(.thinMaterial)
+                    }
             }
+            .buttonStyle(.plain)
         }
     }
     
@@ -1053,6 +1049,50 @@ struct MinimalWinModal: View {
             }
             .padding(.horizontal, 40)
         }
+    }
+}
+
+struct GameSettingsMenu: View {
+    @Binding var moveMode: GameView.MoveMode
+    let onQuit: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                    .onTapGesture(perform: onDismiss)
+                    .transition(.opacity)
+
+                VStack {
+                    Spacer()
+
+                    VStack(spacing: 24) {
+                        Text("Game Settings")
+                            .font(.headline)
+                            .foregroundColor(.white)
+
+                        Picker("Move Mode", selection: $moveMode) {
+                            Text("Drag").tag(GameView.MoveMode.drag)
+                            Text("Tap").tag(GameView.MoveMode.tap)
+                        }
+                        .pickerStyle(.segmented)
+
+                        CleanGlassButton(title: "Quit Game", icon: "xmark.circle.fill", color: .red, action: onQuit)
+                    }
+                    .padding(24)
+                    .padding(.bottom, max(20, geometry.safeAreaInsets.bottom))
+                    .background(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .fill(Color(red: 0.1, green: 0.1, blue: 0.1))
+                    )
+                    .padding(.horizontal, 20)
+                    .transition(.move(edge: .bottom))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
